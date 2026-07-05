@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gilt &amp; Gaussians &mdash; Splatting a Rococo Chair into a Real Park</title>
+  <meta name="description" content="A 3D Gaussian Splatting composition project: a synthetic Rococo chair fused into a real MipNeRF-360 bicycle park scene.">
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #141811;
+      --paper: #ede7d3;
+      --paper-soft: #f7f0db;
+      --moss: #31583f;
+      --moss-deep: #163323;
+      --fern: #668f42;
+      --gilt: #c78f2e;
+      --gilt-deep: #875a14;
+      --rust: #9b4b2b;
+      --sky: #386d82;
+      --line: rgba(20, 24, 17, 0.22);
+      --line-strong: rgba(20, 24, 17, 0.42);
+      --on-dark: #fff4d8;
+      --shadow: rgba(15, 24, 15, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Segoe UI", "Aptos", Arial, sans-serif;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.58;
+      text-rendering: optimizeLegibility;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(49, 88, 63, 0.1) 1px, transparent 1px),
+        linear-gradient(rgba(49, 88, 63, 0.08) 1px, transparent 1px);
+      background-size: 52px 52px;
+      opacity: 0.42;
+      z-index: -2;
+    }
+
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(237, 231, 211, 0), rgba(237, 231, 211, 0.88));
+      z-index: -1;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    button {
+      font: inherit;
+    }
+
+    .site-shell {
+      min-height: 100vh;
+      overflow-x: clip;
+    }
+
+    .topbar {
+      position: fixed;
+      z-index: 20;
+      top: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.8rem max(1.1rem, calc((100vw - 1180px) / 2 + 1.1rem));
+      color: var(--on-dark);
+      background: linear-gradient(180deg, rgba(12, 22, 15, 0.78), rgba(12, 22, 15, 0.18));
+      backdrop-filter: blur(8px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      min-width: 0;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 0.85rem;
+      height: 0.85rem;
+      border: 2px solid var(--gilt);
+      transform: rotate(45deg);
+      flex: 0 0 auto;
+    }
+
+    .nav {
+      display: flex;
+      gap: 0.9rem;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      font-size: 0.86rem;
+    }
+
+    .nav a {
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+    }
+
+    .nav a:hover {
+      border-color: var(--gilt);
+    }
+
+    .hero {
+      position: relative;
+      min-height: 86vh;
+      display: grid;
+      align-items: end;
+      padding: 6.3rem max(1.1rem, calc((100vw - 1180px) / 2 + 1.1rem)) 3.6rem;
+      color: var(--on-dark);
+      background: var(--moss-deep);
+      isolation: isolate;
+    }
+
+    .hero-video {
+      position: absolute;
+      inset: 0;
+      z-index: -3;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center;
+      background: var(--moss-deep);
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -2;
+      background:
+        linear-gradient(90deg, rgba(10, 15, 10, 0.9) 0%, rgba(10, 15, 10, 0.56) 42%, rgba(10, 15, 10, 0.1) 100%),
+        linear-gradient(180deg, rgba(10, 15, 10, 0.1) 0%, rgba(10, 15, 10, 0.74) 100%);
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 1px;
+      background: var(--gilt);
+      opacity: 0.78;
+    }
+
+    .hero-copy {
+      width: min(680px, 100%);
+    }
+
+    .eyebrow,
+    .mono {
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      margin: 0 0 1rem;
+      color: #f6d68b;
+      font-size: 0.78rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 2.4rem;
+      height: 1px;
+      background: var(--gilt);
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 9ch;
+      font-family: Georgia, "Book Antiqua", serif;
+      font-size: 4.2rem;
+      line-height: 0.98;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 720px;
+      margin: 1.4rem 0 0;
+      font-size: 1.16rem;
+      color: rgba(255, 244, 216, 0.92);
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.7rem;
+    }
+
+    .button,
+    .ghost-button {
+      min-height: 2.75rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.45rem;
+      padding: 0.65rem 0.95rem;
+      border: 1px solid var(--gilt);
+      border-radius: 4px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .button {
+      background: var(--gilt);
+      color: #17120a;
+    }
+
+    .ghost-button {
+      background: rgba(255, 244, 216, 0.08);
+      color: var(--on-dark);
+    }
+
+    .button:hover,
+    .ghost-button:hover {
+      transform: translateY(-1px);
+    }
+
+    .orbit-control {
+      color: var(--on-dark);
+      background: rgba(255, 244, 216, 0.08);
+      cursor: pointer;
+    }
+
+    .stats-band {
+      background: var(--moss-deep);
+      color: var(--on-dark);
+      border-top: 1px solid rgba(255, 244, 216, 0.18);
+      border-bottom: 1px solid rgba(255, 244, 216, 0.18);
+    }
+
+    .stats {
+      width: min(1180px, calc(100% - 2.2rem));
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 0;
+    }
+
+    .stat {
+      padding: 1.15rem 1.05rem;
+      border-left: 1px solid rgba(255, 244, 216, 0.16);
+    }
+
+    .stat:last-child {
+      border-right: 1px solid rgba(255, 244, 216, 0.16);
+    }
+
+    .stat dt {
+      color: rgba(255, 244, 216, 0.68);
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .stat dd {
+      margin: 0.22rem 0 0;
+      font-size: 1.02rem;
+      font-weight: 800;
+    }
+
+    .stat small {
+      display: block;
+      margin-top: 0.1rem;
+      color: rgba(255, 244, 216, 0.66);
+      font-size: 0.73rem;
+      font-weight: 500;
+    }
+
+    main {
+      background: var(--paper);
+    }
+
+    .section {
+      padding: 4.1rem max(1.1rem, calc((100vw - 1180px) / 2 + 1.1rem));
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-header {
+      display: grid;
+      grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+      gap: 2rem;
+      align-items: start;
+      margin-bottom: 2.2rem;
+    }
+
+    .section-label {
+      margin: 0 0 0.6rem;
+      color: var(--rust);
+      font-size: 0.76rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 2rem;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .section-header p {
+      margin: 0;
+      color: rgba(20, 24, 17, 0.74);
+      font-size: 1.02rem;
+    }
+
+    .equation {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 2.2rem;
+      align-items: center;
+    }
+
+    .formula {
+      min-width: 0;
+      padding: 1.15rem 0;
+      border-top: 2px solid var(--moss);
+      border-bottom: 2px solid var(--moss);
+      color: var(--moss-deep);
+      font-size: 2.2rem;
+      font-weight: 900;
+      white-space: nowrap;
+      overflow-x: auto;
+    }
+
+    .formula sub {
+      color: var(--gilt-deep);
+      font-size: 0.48em;
+    }
+
+    .method-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    .method-list li {
+      display: grid;
+      grid-template-columns: 8.2rem minmax(0, 1fr);
+      gap: 1rem;
+      align-items: baseline;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px dotted var(--line-strong);
+    }
+
+    .method-list strong {
+      color: var(--moss);
+      font-size: 0.78rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .timeline {
+      display: grid;
+      gap: 1rem;
+      counter-reset: fault;
+    }
+
+    .fault {
+      display: grid;
+      grid-template-columns: 4.4rem minmax(0, 1fr);
+      gap: 1.1rem;
+      padding: 1rem 0;
+      border-top: 1px solid var(--line);
+      counter-increment: fault;
+    }
+
+    .fault::before {
+      content: "0" counter(fault);
+      color: var(--gilt-deep);
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .fault h3 {
+      margin: 0;
+      font-size: 1.12rem;
+      line-height: 1.18;
+    }
+
+    .fault p {
+      margin: 0.35rem 0 0;
+      max-width: 66ch;
+      color: rgba(20, 24, 17, 0.74);
+    }
+
+    .sweep-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 0.42fr);
+      gap: 2rem;
+      align-items: start;
+    }
+
+    .orbit-bar {
+      margin-top: 0.45rem;
+      border-top: 1px solid var(--line-strong);
+      padding-top: 1.3rem;
+    }
+
+    .bar {
+      display: flex;
+      height: 3rem;
+      gap: 3px;
+      background: rgba(20, 24, 17, 0.1);
+      overflow: hidden;
+      border-radius: 4px;
+    }
+
+    .seg-clean {
+      flex: 68 1 0;
+      background: var(--gilt);
+    }
+
+    .seg-occluded {
+      flex: 18 1 0;
+      background: var(--moss);
+    }
+
+    .seg-haze {
+      flex: 13 1 0;
+      background: var(--sky);
+    }
+
+    .bar-before {
+      display: flex;
+      height: 0.8rem;
+      margin-top: 0.75rem;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    .seg-ghost {
+      flex: 35 1 0;
+      background: repeating-linear-gradient(45deg, var(--rust) 0 4px, transparent 4px 9px);
+    }
+
+    .seg-rest {
+      flex: 65 1 0;
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .legend {
+      margin: 1rem 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 0.55rem;
+      font-size: 0.95rem;
+    }
+
+    .legend li {
+      display: flex;
+      gap: 0.65rem;
+      align-items: center;
+    }
+
+    .chip {
+      width: 0.85rem;
+      height: 0.85rem;
+      border-radius: 2px;
+      flex: 0 0 auto;
+    }
+
+    .chip.clean {
+      background: var(--gilt);
+    }
+
+    .chip.occluded {
+      background: var(--moss);
+    }
+
+    .chip.haze {
+      background: var(--sky);
+    }
+
+    .chip.ghost {
+      background: var(--rust);
+    }
+
+    .callout {
+      padding: 1rem 0 0 1.2rem;
+      border-left: 3px solid var(--gilt);
+    }
+
+    .callout strong {
+      display: block;
+      color: var(--moss-deep);
+      font-size: 2.2rem;
+      line-height: 1;
+    }
+
+    .callout span {
+      display: block;
+      margin-top: 0.45rem;
+      color: rgba(20, 24, 17, 0.72);
+    }
+
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1.5rem;
+    }
+
+    .status {
+      padding-top: 1rem;
+      border-top: 3px solid var(--moss);
+    }
+
+    .status.proposed {
+      border-top-color: var(--gilt);
+    }
+
+    .status h3 {
+      margin: 0;
+      font-size: 1.2rem;
+    }
+
+    .status p {
+      margin: 0.55rem 0 0;
+      color: rgba(20, 24, 17, 0.74);
+    }
+
+    .footer {
+      padding: 2rem max(1.1rem, calc((100vw - 1180px) / 2 + 1.1rem));
+      color: var(--on-dark);
+      background: var(--moss-deep);
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.3fr;
+      gap: 1.4rem;
+    }
+
+    .footer h2,
+    .footer h3,
+    .footer p {
+      margin: 0;
+    }
+
+    .footer h2 {
+      font-family: Georgia, "Book Antiqua", serif;
+      font-size: 1.5rem;
+      color: #f6d68b;
+    }
+
+    .footer h3 {
+      color: rgba(255, 244, 216, 0.68);
+      font-size: 0.72rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .footer p {
+      margin-top: 0.35rem;
+      color: rgba(255, 244, 216, 0.86);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 900px) {
+      .topbar {
+        position: absolute;
+      }
+
+      .nav {
+        display: none;
+      }
+
+      .hero {
+        min-height: 82vh;
+      }
+
+      h1 {
+        font-size: 3.2rem;
+      }
+
+      .stats,
+      .section-header,
+      .equation,
+      .sweep-grid,
+      .status-grid,
+      .footer-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stats {
+        width: 100%;
+      }
+
+      .stat {
+        border-right: 0;
+        border-left: 0;
+        border-top: 1px solid rgba(255, 244, 216, 0.16);
+        padding-left: max(1.1rem, calc((100vw - 1180px) / 2 + 1.1rem));
+        padding-right: max(1.1rem, calc((100vw - 1180px) / 2 + 1.1rem));
+      }
+
+      .stat:last-child {
+        border-right: 0;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .hero {
+        padding-top: 5.4rem;
+        min-height: 78vh;
+      }
+
+      .hero-copy {
+        width: min(100%, 22rem);
+        max-width: 22rem;
+      }
+
+      .eyebrow {
+        font-size: 0.68rem;
+        letter-spacing: 0.1em;
+      }
+
+      h1 {
+        max-width: 8ch;
+        font-size: 2.7rem;
+      }
+
+      .subtitle {
+        max-width: 22rem;
+        font-size: 1rem;
+      }
+
+      h2 {
+        font-size: 1.55rem;
+      }
+
+      .formula {
+        font-size: 1.45rem;
+      }
+
+      .method-list li,
+      .fault {
+        grid-template-columns: 1fr;
+        gap: 0.3rem;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html {
+        scroll-behavior: auto;
+      }
+
+      .button:hover,
+      .ghost-button:hover {
+        transform: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="site-shell">
+    <header class="topbar" aria-label="Site navigation">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span> HSL 3DGS</div>
+      <nav class="nav" aria-label="Sections">
+        <a href="#method">Method</a>
+        <a href="#debugging">Debugging</a>
+        <a href="#orbit">Orbit</a>
+        <a href="#extension">Extension</a>
+      </nav>
+    </header>
+
+    <section class="hero" aria-label="Gilt and Gaussians showcase">
+      <video class="hero-video" id="heroVideo" autoplay loop muted playsinline aria-label="Looping orbit render of the Rococo chair composited into the bicycle park scene">
+        <source src="assets/orbit.mp4" type="video/mp4">
+      </video>
+      <div class="hero-copy">
+        <p class="eyebrow">3D Gaussian Splatting composition</p>
+        <h1>Gilt &amp; Gaussians</h1>
+        <p class="subtitle">
+          A green-and-gold synthetic Rococo chair, trained separately from a real park scene,
+          then placed into MipNeRF-360 Bicycle by transforming and merging the underlying
+          Gaussian parameters.
+        </p>
+        <div class="hero-actions">
+          <a class="button" href="#orbit">See the scored orbit</a>
+          <a class="ghost-button" href="assets/HSL_Technical_Assessment_3DGS_Composition.pptx">Open the deck</a>
+          <button class="ghost-button orbit-control" id="videoToggle" type="button" aria-controls="heroVideo">Pause orbit</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="stats-band" aria-label="Project facts">
+      <dl class="stats">
+        <div class="stat">
+          <dt>Scene</dt>
+          <dd>Bicycle <small>MipNeRF-360, real COLMAP cameras</small></dd>
+        </div>
+        <div class="stat">
+          <dt>Asset</dt>
+          <dd>Chair <small>NeRF-Synthetic, Blender transforms</small></dd>
+        </div>
+        <div class="stat">
+          <dt>Scale</dt>
+          <dd>0.6 <small>render-refined from a 0.15 estimate</small></dd>
+        </div>
+        <div class="stat">
+          <dt>Rotation</dt>
+          <dd>103.39 deg <small>Rodrigues up-axis alignment</small></dd>
+        </div>
+        <div class="stat">
+          <dt>Ghost arc</dt>
+          <dd>0% <small>after pruning and SH damping</small></dd>
+        </div>
+      </dl>
+    </section>
+
+    <main>
+      <section class="section" id="method">
+        <div class="section-header">
+          <div>
+            <p class="section-label mono">The map</p>
+            <h2>One rigid transform, applied in splat space.</h2>
+          </div>
+          <p>
+            The output is not a 2D paste. The chair Gaussians are transformed into the real
+            scene coordinate system and concatenated before rendering, so depth order and alpha
+            compositing happen inside the original 3DGS rasterizer.
+          </p>
+        </div>
+
+        <div class="equation">
+          <div class="formula mono">p<sub>scene</sub> = s R p<sub>asset</sub> + t</div>
+          <ul class="method-list">
+            <li><strong>Position</strong><span>p' = s R p + t for every foreground Gaussian.</span></li>
+            <li><strong>Scale</strong><span>log-scale is offset by log(s) per axis.</span></li>
+            <li><strong>Rotation</strong><span>asset quaternions are composed with the placement rotation and renormalized.</span></li>
+            <li><strong>Appearance</strong><span>opacity and DC color are blended toward local scene statistics with a hard opacity floor.</span></li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="section" id="debugging">
+        <div class="section-header">
+          <div>
+            <p class="section-label mono">Field notes</p>
+            <h2>Five failures found by rendering, not by wishing.</h2>
+          </div>
+          <p>
+            The math was compact. The implementation was not. The actual project became a
+            debugging trail through config defaults, grounding, density schedules, floaters,
+            baked color, and the late-discovered up-axis mismatch.
+          </p>
+        </div>
+
+        <div class="timeline">
+          <article class="fault">
+            <div>
+              <h3>The chair that was almost invisible</h3>
+              <p>Runner defaults were overriding the checked-in config, silently changing scale and opacity.</p>
+            </div>
+          </article>
+          <article class="fault">
+            <div>
+              <h3>Floating above the grass</h3>
+              <p>Placement height moved from manual guessing to scene point-cloud grounding plus camera calibration.</p>
+            </div>
+          </article>
+          <article class="fault">
+            <div>
+              <h3>The confetti ball</h3>
+              <p>The chair had reused the Bicycle VRAM-throttled densification schedule, capping it at about 48k Gaussians before retraining at about 289k.</p>
+            </div>
+          </article>
+          <article class="fault">
+            <div>
+              <h3>The ghost halo</h3>
+              <p>Floater Gaussians and white-background color were handled with four pruning filters and spherical-harmonic rest-band damping.</p>
+            </div>
+          </article>
+          <article class="fault">
+            <div>
+              <h3>The up-axis trap</h3>
+              <p>Blender's local up axis had to be aligned to the real scene's measured up vector using Rodrigues' rotation formula.</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" id="orbit">
+        <div class="section-header">
+          <div>
+            <p class="section-label mono">Measured result</p>
+            <h2>The full orbit is honest about its limits.</h2>
+          </div>
+          <p>
+            The 360-degree supplementary orbit keeps the entire circle visible: strong viewing arcs,
+            real bench and bicycle occlusion, and the original scene's dark haze near zero degrees.
+            The old unrecognizable ghost failure is gone.
+          </p>
+        </div>
+
+        <div class="sweep-grid">
+          <div class="orbit-bar">
+            <div class="bar" aria-label="68 percent clean, 18 percent occluded, 13 percent hazy">
+              <span class="seg-clean" title="68% clean and recognizable"></span>
+              <span class="seg-occluded" title="18% occluded by bench and bicycle"></span>
+              <span class="seg-haze" title="13% scene haze"></span>
+            </div>
+            <div class="bar-before" aria-label="Earlier ghost arc was 35 percent">
+              <span class="seg-ghost" title="Earlier ghost arc: 35%"></span>
+              <span class="seg-rest" title="Remaining earlier orbit"></span>
+            </div>
+            <ul class="legend">
+              <li><span class="chip clean" aria-hidden="true"></span><strong>68%</strong> clean and recognizable</li>
+              <li><span class="chip occluded" aria-hidden="true"></span><strong>18%</strong> occluded by bench and bicycle</li>
+              <li><span class="chip haze" aria-hidden="true"></span><strong>13%</strong> affected by scene haze</li>
+              <li><span class="chip ghost" aria-hidden="true"></span><strong>0%</strong> unrecognizable ghost, down from 35%</li>
+            </ul>
+          </div>
+
+          <aside class="callout">
+            <strong>120</strong>
+            <span>frames in the full orbit, sampled at 3 degrees per frame. The trimmed clip is the showcase arc; this page shows the motion as a living render.</span>
+          </aside>
+        </div>
+      </section>
+
+      <section class="section" id="extension">
+        <div class="section-header">
+          <div>
+            <p class="section-label mono">Extension</p>
+            <h2>What shipped, and what is still an idea.</h2>
+          </div>
+          <p>
+            The current system includes a heuristic appearance match. The proposed extension is
+            to make that correction learned and view-aware instead of one global statistical blend.
+          </p>
+        </div>
+
+        <div class="status-grid">
+          <article class="status">
+            <h3>Shipped: statistical appearance match</h3>
+            <p>The chair keeps 65% of its identity while blending 35% toward local scene color and brightness, with an opacity floor to prevent invisibility.</p>
+          </article>
+          <article class="status proposed">
+            <h3>Proposed: learned appearance transfer</h3>
+            <p>Optimize color correction against rendered feedback from multiple real cameras, rather than relying on a single averaged scene statistic.</p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-grid">
+        <div>
+          <h2>Gilt &amp; Gaussians</h2>
+          <p>Splatting a Rococo chair into a real park.</p>
+        </div>
+        <div>
+          <h3>Verification</h3>
+          <p>21 automated tests cover the placement math and pipeline helpers.</p>
+        </div>
+        <div>
+          <h3>Submission bundle</h3>
+          <p>Code, process notes, Kaggle/Colab runners, final render, orbit videos, and the 3-slide technical deck.</p>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    (function () {
+      var video = document.getElementById("heroVideo");
+      var toggle = document.getElementById("videoToggle");
+      if (!video || !toggle) return;
+
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        video.removeAttribute("autoplay");
+        try { video.pause(); } catch (error) {}
+        toggle.textContent = "Play orbit";
+      }
+
+      toggle.addEventListener("click", function () {
+        if (video.paused) {
+          video.play();
+          toggle.textContent = "Pause orbit";
+        } else {
+          video.pause();
+          toggle.textContent = "Play orbit";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
